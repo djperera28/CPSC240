@@ -1,0 +1,455 @@
+     1                                  ; Program Name: Vehicle Speed. Copyright (C) 2026 David Perera
+     2                                  ;
+     3                                  ; This program is free software: you can redistribute it and/or modify it under the
+     4                                  ; terms of the GNU General Public License version 3 as published by the Free Software
+     5                                  ; Foundation. This program is distributed in the hope that it will be useful, but
+     6                                  ; WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+     7                                  ; FITNESS FOR A PARTICULAR PURPOSE. A copy of the GNU General Public License v3 is
+     8                                  ; available at <https://www.gnu.org/licenses/>.
+     9                                  ;
+    10                                  ; Author Information:
+    11                                  ; Name: David Perera
+    12                                  ; CWID: 884532367
+    13                                  ; Section: CPSC 240-7
+    14                                  ; Email: djperera28@csu.fullerton.edu
+    15                                  ;
+    16                                  ; Program Information:
+    17                                  ; Name: Vehicle Speed
+    18                                  ; Languages: C++ and x86-64 assembly, with a Bash build script
+    19                                  ; Start Date: 2026-08-27
+    20                                  ; Completion Date: 2026-09-
+    21                                  ;
+    22                                  ; Program's Purpose:
+    23                                  ; Vehicle Speed obtains GPS measurements for the delivery route from Fullerton to
+    24                                  ; Mission Viejo to Long Beach and back to Fullerton. It computes total driving time
+    25                                  ; and average road speed for the complete route.
+    26                                  ;
+    27                                  ; This File:
+    28                                  ; File: delivery.asm
+    29                                  ; Function: expressdelivery
+    30                                  ; Purpose: Collect six GPS values, calculate route totals, display the results, and
+    31                                  ;          return the route's average speed to the C++ driver.
+    32                                  ; Language: x86-64 assembly
+    33                                  ; Syntax: Intel
+    34                                  ; Assembler: NASM
+    35                                  ; Assemble Command: nasm -f elf64 -l delivery.lis -o delivery.o delivery.asm
+    36                                  ;
+    37                                  ; Development Information:
+    38                                  ; Platform: Linux x86-64
+    39                                  ; Process: Edit, assemble, compile, link, execute, and verify sample results
+    40                                  ; Tools: NASM assembler, GNU g++ compiler/linker, and a text editor
+    41                                  ; Files: main.cpp, delivery.asm, macro.inc, r.sh
+    42                                  ; Status: Completed and tested
+    43                                  
+    44                                  
+    45                                  ; Declaration Section
+    46                                  
+    47                                  extern printf
+    48                                  extern fgets
+    49                                  extern stdin
+    50                                  extern atof
+    51                                  
+    52                                  global expressdelivery
+    53                                  
+    54                                  maximum_number_of_characters_for_input equ 512
+    55                                  
+    56                                  %include "macro.inc"
+     1                              <1> ; Author Information:
+     2                              <1> ; Name: David Perera
+     3                              <1> ; CWID: 884532367
+     4                              <1> ; Section: CPSC 240-7
+     5                              <1> ; Email: djperera28@csu.fullerton.edu
+     6                              <1> ;
+     7                              <1> ; Program Information:
+     8                              <1> ; Name: Vehicle Speed
+     9                              <1> ; Languages: C++ and x86-64 assembly, with a Bash build script
+    10                              <1> ; Files: main.cpp, delivery.asm, macro.inc, r.sh
+    11                              <1> ;
+    12                              <1> ; This File:
+    13                              <1> ; File: macro.inc
+    14                              <1> ; Purpose: Provide the activation-record macros used to preserve and restore the
+    15                              <1> ;          delivery function's general-purpose register environment.
+    16                              <1> ; Language: x86-64 assembly
+    17                              <1> ; Syntax: Intel
+    18                              <1> ; Assembler: NASM
+    19                              <1> 
+    20                              <1> ; Preserve the delivery driver's general-purpose register environment
+    21                              <1> %macro create_activation_record 0
+    22                              <1>     push rbp
+    23                              <1>     mov  rbp, rsp
+    24                              <1>     push rbx
+    25                              <1>     push rcx
+    26                              <1>     push rdx
+    27                              <1>     push rdi
+    28                              <1>     push rsi
+    29                              <1>     push r8
+    30                              <1>     push r9
+    31                              <1>     push r10
+    32                              <1>     push r11
+    33                              <1>     push r12
+    34                              <1>     push r13
+    35                              <1>     push r14
+    36                              <1>     push r15
+    37                              <1>     pushf
+    38                              <1> %endmacro
+    39                              <1> 
+    40                              <1> ; Restore the delivery driver's general-purpose register environment
+    41                              <1> %macro delete_activation_record 0
+    42                              <1>     popf
+    43                              <1>     pop r15
+    44                              <1>     pop r14
+    45                              <1>     pop r13
+    46                              <1>     pop r12
+    47                              <1>     pop r11
+    48                              <1>     pop r10
+    49                              <1>     pop r9
+    50                              <1>     pop r8
+    51                              <1>     pop rsi
+    52                              <1>     pop rdi
+    53                              <1>     pop rdx
+    54                              <1>     pop rcx
+    55                              <1>     pop rbx
+    56                              <1>     pop rbp
+    57                              <1> %endmacro
+    57                                  
+    58                                  
+    59                                  ; segment .data is where initialized data is declared
+    60                                  segment .data
+    61                                  
+    62                                  align 16
+    63                                  
+    64 00000000 466F72206173736973-     output_software_maintenance db "For assistance contact the developer at <YOUR EMAIL>@csu.fullerton.edu.", 10, 0
+    64 00000009 74616E636520636F6E-
+    64 00000012 746163742074686520-
+    64 0000001B 646576656C6F706572-
+    64 00000024 206174203C594F5552-
+    64 0000002D 20454D41494C3E4063-
+    64 00000036 73752E66756C6C6572-
+    64 0000003F 746F6E2E6564752E0A-
+    64 00000048 00                 
+    65                                  
+    66 00000049 0A456E746572207468-     prompt_fullerton_to_mission_viejo_distance db 10, "Enter the miles driven from Fullerton to Mission Viejo: ", 0
+    66 00000052 65206D696C65732064-
+    66 0000005B 726976656E2066726F-
+    66 00000064 6D2046756C6C657274-
+    66 0000006D 6F6E20746F204D6973-
+    66 00000076 73696F6E205669656A-
+    66 0000007F 6F3A2000           
+    67 00000083 456E74657220746865-     prompt_fullerton_to_mission_viejo_speed db "Enter the average speed (miles per hour) of that leg of the trip: ", 0
+    67 0000008C 206176657261676520-
+    67 00000095 737065656420286D69-
+    67 0000009E 6C6573207065722068-
+    67 000000A7 6F757229206F662074-
+    67 000000B0 686174206C6567206F-
+    67 000000B9 662074686520747269-
+    67 000000C2 703A2000           
+    68                                  
+    69 000000C6 0A456E746572207468-     prompt_mission_viejo_to_long_beach_distance db 10, "Enter the miles driven from Mission Viejo to Long Beach: ", 0
+    69 000000CF 65206D696C65732064-
+    69 000000D8 726976656E2066726F-
+    69 000000E1 6D204D697373696F6E-
+    69 000000EA 205669656A6F20746F-
+    69 000000F3 204C6F6E6720426561-
+    69 000000FC 63683A2000         
+    70 00000101 456E74657220746865-     prompt_mission_viejo_to_long_beach_speed db "Enter the average speed (miles per hour) of that leg of the trip: ", 0
+    70 0000010A 206176657261676520-
+    70 00000113 737065656420286D69-
+    70 0000011C 6C6573207065722068-
+    70 00000125 6F757229206F662074-
+    70 0000012E 686174206C6567206F-
+    70 00000137 662074686520747269-
+    70 00000140 703A2000           
+    71                                  
+    72 00000144 0A456E746572207468-     prompt_long_beach_to_fullerton_distance db 10, "Enter the miles driven from Long Beach to Fullerton: ", 0
+    72 0000014D 65206D696C65732064-
+    72 00000156 726976656E2066726F-
+    72 0000015F 6D204C6F6E67204265-
+    72 00000168 61636820746F204675-
+    72 00000171 6C6C6572746F6E3A20-
+    72 0000017A 00                 
+    73 0000017B 456E74657220746865-     prompt_long_beach_to_fullerton_speed db "Enter the average speed (miles per hour) of that leg of the trip: ", 0
+    73 00000184 206176657261676520-
+    73 0000018D 737065656420286D69-
+    73 00000196 6C6573207065722068-
+    73 0000019F 6F757229206F662074-
+    73 000001A8 686174206C6567206F-
+    73 000001B1 662074686520747269-
+    73 000001BA 703A2000           
+    74                                  
+    75 000001BE 0A54686520746F7461-     output_total_driving_time db 10, "The total driving time was %1.2lf hours.", 10, 0
+    75 000001C7 6C2064726976696E67-
+    75 000001D0 2074696D6520776173-
+    75 000001D9 2025312E326C662068-
+    75 000001E2 6F7572732E0A00     
+    76 000001E9 546865206176657261-     output_average_speed db "The average speed was %1.2lf m/h", 10, 0
+    76 000001F2 676520737065656420-
+    76 000001FB 7761732025312E326C-
+    76 00000204 66206D2F680A00     
+    77                                  
+    78 0000020B 257300                  string_format db "%s", 0
+    79                                  
+    80                                  
+    81                                  ; segment .bss is where uninitialized data is declared
+    82                                  segment .bss
+    83                                  
+    84 00000000 <res 200h>              fullerton_to_mission_viejo_distance_string resb maximum_number_of_characters_for_input
+    85 00000200 <res 200h>              fullerton_to_mission_viejo_speed_string    resb maximum_number_of_characters_for_input
+    86 00000400 <res 200h>              mission_viejo_to_long_beach_distance_string resb maximum_number_of_characters_for_input
+    87 00000600 <res 200h>              mission_viejo_to_long_beach_speed_string    resb maximum_number_of_characters_for_input
+    88 00000800 <res 200h>              long_beach_to_fullerton_distance_string resb maximum_number_of_characters_for_input
+    89 00000A00 <res 200h>              long_beach_to_fullerton_speed_string    resb maximum_number_of_characters_for_input
+    90                                  
+    91 00000C00 ????????????????        fullerton_to_mission_viejo_distance resq 1
+    92 00000C08 ????????????????        fullerton_to_mission_viejo_speed    resq 1
+    93 00000C10 ????????????????        mission_viejo_to_long_beach_distance resq 1
+    94 00000C18 ????????????????        mission_viejo_to_long_beach_speed    resq 1
+    95 00000C20 ????????????????        long_beach_to_fullerton_distance resq 1
+    96 00000C28 ????????????????        long_beach_to_fullerton_speed    resq 1
+    97 00000C30 ????????????????        total_driving_time resq 1
+    98 00000C38 ????????????????        average_route_speed resq 1
+    99                                  
+   100                                  
+   101                                  ; segment .text is where executable instructions are declared
+   102                                  segment .text
+   103                                  
+   104                                  ; The label expressdelivery defines the assembly function's entry point
+   105                                  expressdelivery:
+   106                                  
+   107                                  ; Preserve the calling program's general-purpose register environment
+   108                                  create_activation_record
+    22 00000000 55                  <1>  push rbp
+    23 00000001 4889E5              <1>  mov rbp, rsp
+    24 00000004 53                  <1>  push rbx
+    25 00000005 51                  <1>  push rcx
+    26 00000006 52                  <1>  push rdx
+    27 00000007 57                  <1>  push rdi
+    28 00000008 56                  <1>  push rsi
+    29 00000009 4150                <1>  push r8
+    30 0000000B 4151                <1>  push r9
+    31 0000000D 4152                <1>  push r10
+    32 0000000F 4153                <1>  push r11
+    33 00000011 4154                <1>  push r12
+    34 00000013 4155                <1>  push r13
+    35 00000015 4156                <1>  push r14
+    36 00000017 4157                <1>  push r15
+    37 00000019 9C                  <1>  pushf
+   109                                  
+   110                                  
+   111                                  ; Introduce the developer responsible for the delivery calculator
+   112 0000001A B800000000              mov rax, 0
+   113 0000001F 48BF-                   mov rdi, string_format
+   113 00000021 [0B02000000000000] 
+   114 00000029 48BE-                   mov rsi, output_software_maintenance
+   114 0000002B [0000000000000000] 
+   115 00000033 E8(00000000)            call printf
+   116                                  
+   117                                  
+   118                                  ; Record the Fullerton-to-Mission-Viejo GPS measurements
+   119 00000038 B800000000              mov rax, 0
+   120 0000003D 48BF-                   mov rdi, string_format
+   120 0000003F [0B02000000000000] 
+   121 00000047 48BE-                   mov rsi, prompt_fullerton_to_mission_viejo_distance
+   121 00000049 [4900000000000000] 
+   122 00000051 E8(00000000)            call printf
+   123                                  
+   124 00000056 B800000000              mov rax, 0
+   125 0000005B 48BF-                   mov rdi, fullerton_to_mission_viejo_distance_string
+   125 0000005D [0000000000000000] 
+   126 00000065 BE00020000              mov rsi, maximum_number_of_characters_for_input
+   127 0000006A 488B1425[00000000]      mov rdx, [stdin]
+   127          ******************       warning: implicit DEFAULT ABS is deprecated [-w+implicit-abs-deprecated]
+   128 00000072 E8(00000000)            call fgets
+   129                                  
+   130 00000077 B800000000              mov rax, 0
+   131 0000007C 48BF-                   mov rdi, fullerton_to_mission_viejo_distance_string
+   131 0000007E [0000000000000000] 
+   132 00000086 E8(00000000)            call atof
+   133 0000008B F20F110425-             movsd qword [fullerton_to_mission_viejo_distance], xmm0
+   133 00000090 [000C0000]         
+   134                                  
+   135 00000094 B800000000              mov rax, 0
+   136 00000099 48BF-                   mov rdi, string_format
+   136 0000009B [0B02000000000000] 
+   137 000000A3 48BE-                   mov rsi, prompt_fullerton_to_mission_viejo_speed
+   137 000000A5 [8300000000000000] 
+   138 000000AD E8(00000000)            call printf
+   139                                  
+   140 000000B2 B800000000              mov rax, 0
+   141 000000B7 48BF-                   mov rdi, fullerton_to_mission_viejo_speed_string
+   141 000000B9 [0002000000000000] 
+   142 000000C1 BE00020000              mov rsi, maximum_number_of_characters_for_input
+   143 000000C6 488B1425[00000000]      mov rdx, [stdin]
+   144 000000CE E8(00000000)            call fgets
+   145                                  
+   146 000000D3 B800000000              mov rax, 0
+   147 000000D8 48BF-                   mov rdi, fullerton_to_mission_viejo_speed_string
+   147 000000DA [0002000000000000] 
+   148 000000E2 E8(00000000)            call atof
+   149 000000E7 F20F110425-             movsd qword [fullerton_to_mission_viejo_speed], xmm0
+   149 000000EC [080C0000]         
+   150                                  
+   151                                  
+   152                                  ; Record the Mission-Viejo-to-Long-Beach GPS measurements
+   153 000000F0 B800000000              mov rax, 0
+   154 000000F5 48BF-                   mov rdi, string_format
+   154 000000F7 [0B02000000000000] 
+   155 000000FF 48BE-                   mov rsi, prompt_mission_viejo_to_long_beach_distance
+   155 00000101 [C600000000000000] 
+   156 00000109 E8(00000000)            call printf
+   157                                  
+   158 0000010E B800000000              mov rax, 0
+   159 00000113 48BF-                   mov rdi, mission_viejo_to_long_beach_distance_string
+   159 00000115 [0004000000000000] 
+   160 0000011D BE00020000              mov rsi, maximum_number_of_characters_for_input
+   161 00000122 488B1425[00000000]      mov rdx, [stdin]
+   162 0000012A E8(00000000)            call fgets
+   163                                  
+   164 0000012F B800000000              mov rax, 0
+   165 00000134 48BF-                   mov rdi, mission_viejo_to_long_beach_distance_string
+   165 00000136 [0004000000000000] 
+   166 0000013E E8(00000000)            call atof
+   167 00000143 F20F110425-             movsd qword [mission_viejo_to_long_beach_distance], xmm0
+   167 00000148 [100C0000]         
+   168                                  
+   169 0000014C B800000000              mov rax, 0
+   170 00000151 48BF-                   mov rdi, string_format
+   170 00000153 [0B02000000000000] 
+   171 0000015B 48BE-                   mov rsi, prompt_mission_viejo_to_long_beach_speed
+   171 0000015D [0101000000000000] 
+   172 00000165 E8(00000000)            call printf
+   173                                  
+   174 0000016A B800000000              mov rax, 0
+   175 0000016F 48BF-                   mov rdi, mission_viejo_to_long_beach_speed_string
+   175 00000171 [0006000000000000] 
+   176 00000179 BE00020000              mov rsi, maximum_number_of_characters_for_input
+   177 0000017E 488B1425[00000000]      mov rdx, [stdin]
+   178 00000186 E8(00000000)            call fgets
+   179                                  
+   180 0000018B B800000000              mov rax, 0
+   181 00000190 48BF-                   mov rdi, mission_viejo_to_long_beach_speed_string
+   181 00000192 [0006000000000000] 
+   182 0000019A E8(00000000)            call atof
+   183 0000019F F20F110425-             movsd qword [mission_viejo_to_long_beach_speed], xmm0
+   183 000001A4 [180C0000]         
+   184                                  
+   185                                  
+   186                                  ; Record the Long-Beach-to-Fullerton GPS measurements
+   187 000001A8 B800000000              mov rax, 0
+   188 000001AD 48BF-                   mov rdi, string_format
+   188 000001AF [0B02000000000000] 
+   189 000001B7 48BE-                   mov rsi, prompt_long_beach_to_fullerton_distance
+   189 000001B9 [4401000000000000] 
+   190 000001C1 E8(00000000)            call printf
+   191                                  
+   192 000001C6 B800000000              mov rax, 0
+   193 000001CB 48BF-                   mov rdi, long_beach_to_fullerton_distance_string
+   193 000001CD [0008000000000000] 
+   194 000001D5 BE00020000              mov rsi, maximum_number_of_characters_for_input
+   195 000001DA 488B1425[00000000]      mov rdx, [stdin]
+   196 000001E2 E8(00000000)            call fgets
+   197                                  
+   198 000001E7 B800000000              mov rax, 0
+   199 000001EC 48BF-                   mov rdi, long_beach_to_fullerton_distance_string
+   199 000001EE [0008000000000000] 
+   200 000001F6 E8(00000000)            call atof
+   201 000001FB F20F110425-             movsd qword [long_beach_to_fullerton_distance], xmm0
+   201 00000200 [200C0000]         
+   202                                  
+   203 00000204 B800000000              mov rax, 0
+   204 00000209 48BF-                   mov rdi, string_format
+   204 0000020B [0B02000000000000] 
+   205 00000213 48BE-                   mov rsi, prompt_long_beach_to_fullerton_speed
+   205 00000215 [7B01000000000000] 
+   206 0000021D E8(00000000)            call printf
+   207                                  
+   208 00000222 B800000000              mov rax, 0
+   209 00000227 48BF-                   mov rdi, long_beach_to_fullerton_speed_string
+   209 00000229 [000A000000000000] 
+   210 00000231 BE00020000              mov rsi, maximum_number_of_characters_for_input
+   211 00000236 488B1425[00000000]      mov rdx, [stdin]
+   212 0000023E E8(00000000)            call fgets
+   213                                  
+   214 00000243 B800000000              mov rax, 0
+   215 00000248 48BF-                   mov rdi, long_beach_to_fullerton_speed_string
+   215 0000024A [000A000000000000] 
+   216 00000252 E8(00000000)            call atof
+   217 00000257 F20F110425-             movsd qword [long_beach_to_fullerton_speed], xmm0
+   217 0000025C [280C0000]         
+   218                                  
+   219                                  
+   220                                  ; Determine the truck's complete driving time over all three route legs
+   221 00000260 F2440F100425-           movsd xmm8, qword [fullerton_to_mission_viejo_distance]
+   221 00000266 [000C0000]         
+   222 0000026A F2440F5E0425-           divsd xmm8, qword [fullerton_to_mission_viejo_speed]
+   222 00000270 [080C0000]         
+   223                                  
+   224 00000274 F2440F100C25-           movsd xmm9, qword [mission_viejo_to_long_beach_distance]
+   224 0000027A [100C0000]         
+   225 0000027E F2440F5E0C25-           divsd xmm9, qword [mission_viejo_to_long_beach_speed]
+   225 00000284 [180C0000]         
+   226 00000288 F2450F58C1              addsd xmm8, xmm9
+   227                                  
+   228 0000028D F2440F101425-           movsd xmm10, qword [long_beach_to_fullerton_distance]
+   228 00000293 [200C0000]         
+   229 00000297 F2440F5E1425-           divsd xmm10, qword [long_beach_to_fullerton_speed]
+   229 0000029D [280C0000]         
+   230 000002A1 F2450F58C2              addsd xmm8, xmm10
+   231                                  
+   232 000002A6 F2440F110425-           movsd qword [total_driving_time], xmm8
+   232 000002AC [300C0000]         
+   233                                  
+   234                                  
+   235                                  ; Determine the truck's average road speed across the complete route
+   236 000002B0 F2440F101C25-           movsd xmm11, qword [fullerton_to_mission_viejo_distance]
+   236 000002B6 [000C0000]         
+   237 000002BA F2440F581C25-           addsd xmm11, qword [mission_viejo_to_long_beach_distance]
+   237 000002C0 [100C0000]         
+   238 000002C4 F2440F581C25-           addsd xmm11, qword [long_beach_to_fullerton_distance]
+   238 000002CA [200C0000]         
+   239 000002CE F2440F5E1C25-           divsd xmm11, qword [total_driving_time]
+   239 000002D4 [300C0000]         
+   240                                  
+   241 000002D8 F2440F111C25-           movsd qword [average_route_speed], xmm11
+   241 000002DE [380C0000]         
+   242                                  
+   243                                  
+   244                                  ; Present the complete route's driving results to the delivery dispatcher
+   245 000002E2 B801000000              mov rax, 1
+   246 000002E7 48BF-                   mov rdi, output_total_driving_time
+   246 000002E9 [BE01000000000000] 
+   247 000002F1 F20F100425-             movsd xmm0, qword [total_driving_time]
+   247 000002F6 [300C0000]         
+   248 000002FA E8(00000000)            call printf
+   249                                  
+   250 000002FF B801000000              mov rax, 1
+   251 00000304 48BF-                   mov rdi, output_average_speed
+   251 00000306 [E901000000000000] 
+   252 0000030E F20F100425-             movsd xmm0, qword [average_route_speed]
+   252 00000313 [380C0000]         
+   253 00000317 E8(00000000)            call printf
+   254                                  
+   255                                  
+   256                                  ; Prepare the route's average speed for the C++ driver
+   257 0000031C F20F100425-             movsd xmm0, qword [average_route_speed]
+   257 00000321 [380C0000]         
+   258                                  
+   259                                  
+   260                                  ; Restore the calling program's general-purpose register environment
+   261                                  delete_activation_record
+    42 00000325 9D                  <1>  popf
+    43 00000326 415F                <1>  pop r15
+    44 00000328 415E                <1>  pop r14
+    45 0000032A 415D                <1>  pop r13
+    46 0000032C 415C                <1>  pop r12
+    47 0000032E 415B                <1>  pop r11
+    48 00000330 415A                <1>  pop r10
+    49 00000332 4159                <1>  pop r9
+    50 00000334 4158                <1>  pop r8
+    51 00000336 5E                  <1>  pop rsi
+    52 00000337 5F                  <1>  pop rdi
+    53 00000338 5A                  <1>  pop rdx
+    54 00000339 59                  <1>  pop rcx
+    55 0000033A 5B                  <1>  pop rbx
+    56 0000033B 5D                  <1>  pop rbp
+   262                                  
+   263 0000033C C3                      ret
